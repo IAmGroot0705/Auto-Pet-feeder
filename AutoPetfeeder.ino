@@ -1,0 +1,107 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Servo.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);  // change 0x27 to 0x3F if your LCD uses that address
+Servo myServo;
+
+// Button pins
+const int btnHour = 2;
+const int btnMin = 3;
+const int btnSec = 4;
+const int btnSet = 5;
+
+int setHour = 0, setMin = 0, setSec = 0;
+unsigned long intervalSeconds = 0;
+unsigned long lastDispenseTime = 0;
+bool intervalSet = false;
+
+void setup() {
+  lcd.init();        // initialize LCD
+  lcd.backlight();   // turn on backlight
+
+  myServo.attach(9);
+  myServo.write(0);  // Servo at closed position
+
+  pinMode(btnHour, INPUT_PULLUP);
+  pinMode(btnMin, INPUT_PULLUP);
+  pinMode(btnSec, INPUT_PULLUP);
+  pinMode(btnSet, INPUT_PULLUP);
+
+  lcd.setCursor(0, 0);
+  lcd.print("Automatic Food");
+  lcd.setCursor(0, 1);
+  lcd.print("   Dispenser");
+  delay(2000);
+  lcd.clear();
+}
+
+void loop() {
+  if (!intervalSet) {
+    if (digitalRead(btnHour) == LOW) {
+      delay(200);
+      setHour = (setHour + 1) % 24;
+    }
+    if (digitalRead(btnMin) == LOW) {
+      delay(200);
+      setMin = (setMin + 1) % 60;
+    }
+    if (digitalRead(btnSec) == LOW) {
+      delay(200);
+      setSec = (setSec + 1) % 60;
+    }
+    if (digitalRead(btnSet) == LOW) {
+      delay(200);
+      intervalSeconds = setHour * 3600UL + setMin * 60UL + setSec;
+      if (intervalSeconds == 0) intervalSeconds = 60;  // avoid 0 interval
+      lastDispenseTime = millis() / 1000;
+      intervalSet = true;
+      lcd.clear();
+    }
+
+    lcd.setCursor(0, 0);
+    lcd.print("Set Time:");
+    lcd.setCursor(0, 1);
+    lcd.print(formatTime(setHour) + ":" + formatTime(setMin) + ":" + formatTime(setSec));
+    return;
+  }
+
+  unsigned long currentSeconds = millis() / 1000;
+  unsigned long elapsed = currentSeconds - lastDispenseTime;
+
+  if (elapsed >= intervalSeconds) {
+    // Dispense food now
+    dispenseFood();
+    lastDispenseTime = millis() / 1000; // Restart timer immediately
+    return; // Skip countdown update this cycle
+  }
+
+  // Show countdown
+  unsigned long remaining = intervalSeconds - elapsed;
+  int remH = remaining / 3600;
+  int remM = (remaining % 3600) / 60;
+  int remS = remaining % 60;
+
+  lcd.setCursor(0, 0);
+  lcd.print("Next in:");
+  lcd.setCursor(0, 1);
+  lcd.print(formatTime(remH) + ":" + formatTime(remM) + ":" + formatTime(remS) + "     ");
+}
+
+// Dispensing behavior
+void dispenseFood() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Dispensing...");
+  myServo.write(60);
+  delay(3000);
+
+  myServo.write(0);
+  delay(1000);
+
+  lcd.clear();
+}
+
+String formatTime(int val) {
+  return (val < 10 ? "0" : "") + String(val);
+}
